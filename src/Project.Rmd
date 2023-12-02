@@ -1,0 +1,17 @@
+```{r}
+library(haven)
+full_data <- read_dta('data/04599-0002-Data.dta')
+```
+
+```{r}
+# list of outcomes we may want to study
+# the ones from the paper are "SEGRADES", "SEBEHAVR", "SESCHLWR"
+outcomes <- c("SEGRADES", "SEBEHAVR", "SESCHLWR")
+# outcomes <- c("SEGRADES", "SEBEHAVR", "SESCHLWR", "SEGRADEQ", "SESUSOUT", "SESUSPIN")
+
+# list of covariates we choose to take into account
+# sex, age, race/ethnicity, mothers' educational levels, mothers' marital status, childcare subsidy, and community levels
+covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
+
+dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
+```
