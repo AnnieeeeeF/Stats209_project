@@ -15,3 +15,5 @@ covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
 
 dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
 ```
+
+
