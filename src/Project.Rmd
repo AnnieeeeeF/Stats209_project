@@ -13,7 +13,75 @@ outcomes <- c("SEGRADES", "SEBEHAVR", "SESCHLWR")
 # sex, age, race/ethnicity, mothers' educational levels, mothers' marital status, childcare subsidy, and community levels
 covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
 
+<<<<<<< HEAD
 dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
 ```
 
 
+=======
+# variables we can use for sample selection and stuff
+others <- c("SCHLTYPE", "MOMEMPLD", "HINCOME", "ANYCARE", "HOMESCHL", "HH18OVER", "HHTOTAL", "HHUNDR18", "CENREG")
+
+# select the sample used for study
+# dat <- select_sample(full_data)
+dat <- full_data
+
+# Exclude homeschooled children
+nrow(subset(full_data, HOMESCHL == 1))
+dat <- subset(dat, HOMESCHL != 1)
+nrow(dat)
+
+# Select low-income families only
+# Exclude families from group 14
+nrow(subset(dat, HINCOME == 14))
+dat <- subset(dat, HINCOME <= 13)
+income_medians <- c(2500, 7500, 12500, 17500, 22500, 27500, 32500, 37500, 42500, 47500, 55000, 67500, 87500)
+threshold <- c(9310 + seq(0, 10) * 3180)
+
+dat <- subset(dat, income_medians[HINCOME] < 2 * threshold[HHTOTAL])
+nrow(dat)
+
+# Select households with employed mothers
+dat <- subset(dat, MOMEMPLD == 1)
+# dat <- subset(dat, MOMFTFY == 1)
+nrow(dat)
+
+# Select children that receive some type of after school care
+dat <- subset(dat, RCNOW == 1 | CPSNOW == 1 | SCSELF == 1 | PAAHOME == 1)
+nrow(dat)
+
+# Drop children from ethnicities other than Black / Hispanic / White
+dat <- subset(dat, RACEETHN < 4)
+nrow(dat)
+```
+
+```{r}
+# Sanity checks
+
+# receiving care from a relative other than a parent on a regular basis after school, for example, from grandparents, brothers or sisters, or any other relatives ~ 26.2 %
+nrow(subset(dat, RCNOW == 1)) / nrow(dat)
+
+# # receiving care in your home or another home on a regular basis after school from someone who is not related to them
+# nrow(subset(dat, NCNOW == 1)) / nrow(dat)
+
+# now attending an after- school program at a school or in a center, either on a scheduled or a drop-in basis ~ 17.1%
+nrow(subset(dat, CPSNOW == 1)) / nrow(dat)
+# nrow(subset(dat, ASCOVER == 1)) / nrow(dat)
+
+# is (CHILD) responsible for (himself/herself) after school on a regular basis ~ 13.2%
+nrow(subset(dat, SCSELF == 1)) / nrow(dat)
+
+# PARENT AT HOME AFTER SCHOOL ~ 36%
+nrow(subset(dat, PAAHOME == 1)) / nrow(dat)
+
+# White ~ 33.9%
+nrow(subset(dat, RACEETHN == 1)) / nrow(dat)
+# Black ~ 23%
+nrow(subset(dat, RACEETHN == 2)) / nrow(dat)
+# Hispanic ~ 43.1%
+nrow(subset(dat, RACEETHN == 3)) / nrow(dat)
+
+# Is a state government or welfare agency currently helping you pay for any child care costs ~ 16.4
+nrow(subset(dat, HGOVCUR == 1)) / nrow(dat)
+```
+>>>>>>> origin/main
