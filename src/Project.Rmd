@@ -1,6 +1,6 @@
 ```{r}
 library(haven)
-full_data <- read_dta('../data/04599-0002-Data.dta')
+full_data <- read_dta('data/04599-0002-Data.dta')
 ```
 
 ```{r}
