@@ -1,6 +1,6 @@
 ```{r}
 library(haven)
-full_data <- read_dta('data/04599-0002-Data.dta')
+full_data <- read_dta('../data/04599-0002-Data.dta')
 ```
 
 ```{r}
@@ -13,12 +13,11 @@ outcomes <- c("SEGRADES", "SEBEHAVR", "SESCHLWR")
 # sex, age, race/ethnicity, mothers' educational levels, mothers' marital status, childcare subsidy, and community levels
 covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
 
-<<<<<<< HEAD
+# <<<<<<< HEAD
 dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
 ```
 
-
-=======
+```{r}
 # variables we can use for sample selection and stuff
 others <- c("SCHLTYPE", "MOMEMPLD", "HINCOME", "ANYCARE", "HOMESCHL", "HH18OVER", "HHTOTAL", "HHUNDR18", "CENREG")
 
@@ -55,6 +54,7 @@ dat <- subset(dat, RACEETHN < 4)
 nrow(dat)
 ```
 
+
 ```{r}
 # Sanity checks
 
@@ -85,3 +85,22 @@ nrow(subset(dat, RACEETHN == 3)) / nrow(dat)
 nrow(subset(dat, HGOVCUR == 1)) / nrow(dat)
 ```
 >>>>>>> origin/main
+
+ATE estimation of academic score
+```{r}
+# preprocess data for logistic regression
+lr_data <- dat
+# change values in binary columns to 1 and 0
+lr_data$SCSELF[lr_data$SCSELF == 2] <- 0
+lr_data$SCSELF[lr_data$RCNOW == 2] <- 0
+lr_data$SCSELF[lr_data$CPSNOW == 2] <- 0
+lr_data$SCSELF[lr_data$PAAHOME == 2] <- 0
+lr_data$HGOVCUR[lr_data$HGOVCUR == 2] <- 0
+
+
+summary(glm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB) + HGOVCUR, data=lr_data))
+# In the paper, the coefficient is 0.18 and standard deviation is 0.33. 
+```
+
+
+
