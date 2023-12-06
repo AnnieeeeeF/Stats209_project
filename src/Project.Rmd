@@ -1,6 +1,65 @@
+PUSH ON MY BRANCH
+
+Some concerns: 
+- columns with values in {1,2} still count as binary? 
+- take into acccount the levels "not applicable", "didn't respond", etc? 
+- add average difference in propensity scores for the 1-k matching
+
 ```{r}
 library(haven)
+library(DOS2)
+library(optmatch)
+library(RItools)
+library(plyr)
+library(dplyr)
+library(rcbalance)
+library(ggplot2)
 full_data <- read_dta('data/04599-0002-Data.dta')
+```
+
+```{r, helper function}
+## code taken from "stats209_section_matching.Rmd"
+## puts the results of a pair match in a nice form
+## Usage: summarize.match(dataset,pairmatch_output)
+summarize.match <- function(dat, ms, ps.name="prop", keep.mset=FALSE) {
+  adat <- dat
+  adat$mset <- ms
+  adat <- adat[!is.na(adat$mset),]
+  adat.treat <- adat[adat$HGOVCUR==1, ]
+  adat.ctrl <- adat[adat$HGOVCUR==0, ]
+  
+  adat.m <- merge(adat.treat, adat.ctrl, by="mset", suffixes=c(".1", ".0"))
+  
+  if(!keep.mset) {
+    adat.m <- adat.m[, -which(names(adat.m) %in% c("HGOVCUR.1", "HGOVCUR.0", "mset"))]
+  } else {
+    adat.m <- adat.m[, -which(names(adat.m) %in% c("HGOVCUR.1", "HGOVCUR.0"))]        
+  }
+  adat.m <- adat.m[, sort(names(adat.m), index.return=TRUE)$ix]
+  
+  p0.name <- paste0(ps.name,".", 0)
+  p1.name <- paste0(ps.name,".",1)
+  
+  adat.m.tmp.1 <- adat.m[, -which(names(adat.m) %in% c(p0.name, p1.name))]
+  adat.m.tmp.2 <- adat.m[, c(p0.name, p1.name)]
+  
+  adat.m <- cbind(adat.m.tmp.1, adat.m.tmp.2)
+  
+  return(adat.m)
+}
+
+ms.transform <- function(dat.arg, ms.rcbal) {
+    ctrl <- seq(sum(dat.arg$HGOVCUR==0))
+    matched.ctrl <- ms.rcbal
+    unmatched.ctrl <- setdiff(ctrl,ms.rcbal)
+    
+    dat.tmp <- dat.arg
+    dat.tmp$foo <- NA
+    dat.tmp$foo[dat.tmp$HGOVCUR==1] <- matched.ctrl
+    dat.tmp$foo[dat.tmp$HGOVCUR==0][matched.ctrl] <- matched.ctrl
+
+    return(dat.tmp$foo)    
+}
 ```
 
 ```{r}
@@ -15,3 +74,198 @@ covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
 
 dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
 ```
+
+Data cleaning
+
+```{r}
+# limit sample to people who were treatment or control
+# make HGOVCUR binary in {0,1} instead of {1,2}
+dat <- subset(dat, dat$HGOVCUR == 1 | dat$HGOVCUR == 2)
+dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
+
+# factor categorical variables
+dat$RACEETHN <- as.factor(dat$RACEETHN)
+dat$MOMEDUC <- as.factor(dat$MOMEDUC)
+dat$MOMSTAT <- as.factor(dat$MOMSTAT)
+```
+
+PART A: Exploratory data analysis
+
+```{r}
+# balance of the covariates
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB -1, strata= list(unstrat=NULL), data=dat))
+```
+
+```{r}
+# histogram of MOMSTAT, the most imbalanced covariate, in control and treatment groups
+ggplot(dat, aes(x=MOMSTAT, fill = as.factor(HGOVCUR)))+
+   geom_histogram( color='#e9ecef', alpha=0.4, position='identity', bins = 5)
+ggtitle("Histogram of the edm and faminc covariates")
+```
+
+```{r}
+# estimation of the propensity score 
+dat$prop <- glm(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB, family=binomial, 
+                data=dat)$fitted.values
+ggplot(dat, aes(x=prop, fill = as.factor(HGOVCUR))) + geom_density(alpha=0.4) + 
+  ggtitle("Distribution of the propensity score")
+```
+
+PART B: Pairwise matching
+
+```{r}
+# matched pair set using Mahalanobis distance, w/o caliper
+mat.1 <- smahal(dat$HGOVCUR, dat[,c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")]) 
+ms.1 <- pairmatch(mat.1, data=dat)
+adat.1 <- summarize.match(dat, ms.1)
+```
+
+```{r}
+# average absolute difference in propensity score, before caliper matching
+mean(abs(adat.1$prop.1-adat.1$prop.0))
+# max absolute difference
+max(abs(adat.1$prop.1-adat.1$prop.0))
+```
+
+```{r}
+# matched pair set using Mahalanobis distance, w/ caliper
+mat.2 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1)
+ms.2 <- pairmatch(mat.2, data=dat)
+adat.2 <- summarize.match(dat,ms.2)
+```
+
+```{r}
+# covariate balance before and after caliper matching
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop- 1, 
+            strata=list(unstrat=NULL, ms.2=~ms.2),
+              data=dat)) 
+```
+
+```{r}
+# average absolute difference in propensity score, before caliper matching
+mean(abs(adat.2$prop.1-adat.2$prop.0))
+# max absolute difference
+max(abs(adat.2$prop.1-adat.2$prop.0))
+```
+
+PART C: 1 to k matching
+
+```{r}
+# match each treated to 5 controls, w/ caliper
+mat.3 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1)
+ms.3 <- pairmatch(mat.3, controls = 5, data=dat)
+```
+```{r}
+# covariate balance before and after 1-5 matching
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+              strata=list(unstrat=NULL, ms.3=~ms.3),
+              data=dat))
+```
+
+
+Not working, need to make MOMSTAT as.factor
+```{r}
+# force balance on RACEETHN, MOMEDUC worsens balance
+mat.4 <- addalmostexact(mat.3, z=dat$HGOVCUR, f=dat$MOMEDUC, mult=5) 
+ms.4 <- pairmatch(mat.4, controls = 5, data=dat)
+```
+
+```{r}
+# compare balance before and after forcing balance
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+              strata=list(unstrat=NULL, ms.3=~ms.3),
+              data=dat))
+
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+              strata=list(unstrat=NULL, ms.4=~ms.4),
+              data=dat))
+```
+
+
+Post-matching analysis
+
+Help for p-value
+```{r}
+# p-value from an FRT of Fisher's sharp null from the 1:1 matched data set
+# outcome y = SEGRADES
+```
+
+Should HGOVCUR be included in the linear model?
+```{r}
+# bias corrected estimate of the ATE on the treated
+
+# outcome y = SEGRADES
+n1 <- nrow(adat.1)
+fit1 <- lm(SEGRADES.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+             adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
+fit0 <- lm(SEGRADES.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+             adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
+match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
+match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
+match0 <- rename_at(match0,.vars = vars(ends_with(".0")),.funs = funs(sub("[.]0$", "", .)))
+match1 <- rename_at(match1,.vars = vars(ends_with(".1")),.funs = funs(sub("[.]1$", "", .)))
+mu0hat <- predict(fit0,match1)
+mu1hat <- predict(fit1,match0)
+taum <- mean(adat.1$SEGRADES.1-adat.1$SEGRADES.0)
+bias <- sum(mu0hat - mu1hat)/n1
+taum - bias
+
+# outcome y = SEBEHAVR
+n1 <- nrow(adat.1)
+fit1 <- lm(SEBEHAVR.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+             adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
+fit0 <- lm(SEBEHAVR.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+             adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
+match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
+match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
+match0 <- rename_at(match0,.vars = vars(ends_with(".0")),.funs = funs(sub("[.]0$", "", .)))
+match1 <- rename_at(match1,.vars = vars(ends_with(".1")),.funs = funs(sub("[.]1$", "", .)))
+mu0hat <- predict(fit0,match1)
+mu1hat <- predict(fit1,match0)
+taum <- mean(adat.1$SEBEHAVR.1-adat.1$SEBEHAVR.0)
+bias <- sum(mu0hat - mu1hat)/n1
+taum - bias
+
+# outcome y = SESCHLWR
+n1 <- nrow(adat.1)
+fit1 <- lm(SESCHLWR.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+             adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
+fit0 <- lm(SESCHLWR.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+             adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
+match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
+match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
+match0 <- rename_at(match0,.vars = vars(ends_with(".0")),.funs = funs(sub("[.]0$", "", .)))
+match1 <- rename_at(match1,.vars = vars(ends_with(".1")),.funs = funs(sub("[.]1$", "", .)))
+mu0hat <- predict(fit0,match1)
+mu1hat <- predict(fit1,match0)
+taum <- mean(adat.1$SESCHLWR.1-adat.1$SESCHLWR.0)
+bias <- sum(mu0hat - mu1hat)/n1
+taum - bias
+
+# repeat for other outcomes
+# bias_corrected_ATE <- function(y_name) {
+# #y.1 <- adat.1[[paste0(y_name,".1")]]
+# #y.0 <- adat.1[[paste0(y_name,".0")]]
+# n1 <- nrow(adat.1)
+# fit1 <- lm(y.1 ~ adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+#             adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
+# fit0 <- lm(y.0 ~ adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+#             adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
+# match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
+# match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
+# match0 <- rename_at(match0,.vars = vars(ends_with(".0")),.funs = funs(sub("[.]0$", "", .)))
+# match1 <- rename_at(match1,.vars = vars(ends_with(".1")),.funs = funs(sub("[.]1$", "", .)))
+# mu0hat <- predict(fit0,match1)
+# mu1hat <- predict(fit1,match0)
+# taum <- mean(adat.1$y.1-adat.1$y.0)
+# bias <- sum(mu0hat - mu1hat)/n1
+# taumbc <- taum - bias
+# return(taumbc)
+#     }
+# for (y in outcomes) {
+#     print(bias_corrected_ATE(y))
+# }
+
+```
+
+Stratification
