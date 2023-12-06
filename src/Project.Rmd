@@ -103,4 +103,22 @@ summary(glm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2
 ```
 
 
+```{r}
+lr_data$propensity <- glm(HGOVCUR ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB), data=lr_data)$fitted.values
 
+lr_data$propensity <- pmax(0, lr_data$propensity)
+
+mu1 <- lm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB) + HGOVCUR, data=lr_data, subset = HGOVCUR==1)
+
+mu0 <- lm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB) + HGOVCUR, data=lr_data, subset = HGOVCUR==0)
+
+lr_data$mu1pred <- predict(mu1, lr_data)
+lr_data$mu0pred <- predict(mu0, lr_data)
+
+lr_data <- subset(lr_data, propensity > 0)
+
+mu1_dr <- mean(lr_data$HGOVCUR * (lr_data$SEGRADES - lr_data$mu1pred) / lr_data$propensity + lr_data$mu1pred)
+mu0_dr <- mean((1 - lr_data$HGOVCUR) * (lr_data$SEGRADES - lr_data$mu0pred) / lr_data$propensity + lr_data$mu0pred)
+
+mu1_dr - mu0_dr
+```
