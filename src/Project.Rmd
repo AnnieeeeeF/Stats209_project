@@ -1,8 +1,3 @@
-PUSH ON MY BRANCH
-
-Some concerns: 
-- columns with values in {1,2} still count as binary? 
-- take into acccount the levels "not applicable", "didn't respond", etc? 
 - add average difference in propensity scores for the 1-k matching
 
 ```{r}
@@ -75,18 +70,18 @@ covariates <- c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")
 dat <- full_data[, c("HGOVCUR", outcomes, covariates)]
 ```
 
-Data cleaning
-
+"Data cleaning"
 ```{r}
 # limit sample to people who were treatment or control
 # make HGOVCUR binary in {0,1} instead of {1,2}
-dat <- subset(dat, dat$HGOVCUR == 1 | dat$HGOVCUR == 2)
+dat <- subset(dat, HGOVCUR == 1 | HGOVCUR == 2)
 dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
 
 # factor categorical variables
 dat$RACEETHN <- as.factor(dat$RACEETHN)
 dat$MOMEDUC <- as.factor(dat$MOMEDUC)
 dat$MOMSTAT <- as.factor(dat$MOMSTAT)
+dat$SEX <- as.factor(dat$SEX)
 ```
 
 PART A: Exploratory data analysis
@@ -154,8 +149,7 @@ PART C: 1 to k matching
 # match each treated to 5 controls, w/ caliper
 mat.3 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1)
 ms.3 <- pairmatch(mat.3, controls = 5, data=dat)
-```
-```{r}
+
 # covariate balance before and after 1-5 matching
 plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.3=~ms.3),
@@ -163,14 +157,11 @@ plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + 
 ```
 
 
-Not working, need to make MOMSTAT as.factor
 ```{r}
-# force balance on RACEETHN, MOMEDUC worsens balance
-mat.4 <- addalmostexact(mat.3, z=dat$HGOVCUR, f=dat$MOMEDUC, mult=5) 
+# force balance on MOMSTAT
+mat.4 <- addalmostexact(mat.3, z=dat$HGOVCUR, f=dat$MOMSTAT, mult=5) 
 ms.4 <- pairmatch(mat.4, controls = 5, data=dat)
-```
 
-```{r}
 # compare balance before and after forcing balance
 plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.3=~ms.3),
@@ -181,24 +172,77 @@ plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + 
               data=dat))
 ```
 
+```{r}
+# match each treated to 15 controls, w/ caliper
+mat.5 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1) # same caliper as before, different name
+ms.5 <- pairmatch(mat.5, controls = 15, data=dat)
+
+# covariate balance before and after 1-15 matching
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+              strata=list(unstrat=NULL, ms.5=~ms.5),
+              data=dat))
+```
 
 Post-matching analysis
 
-Help for p-value
 ```{r}
 # p-value from an FRT of Fisher's sharp null from the 1:1 matched data set
-# outcome y = SEGRADES
+generate_random_vector <- function(n) {
+    random_vector <- sample(c(1, -1), n, replace = TRUE)
+    return(random_vector)
+}
+observed_ate <- mean(adat.1$SEBEHAVR.1 - adat.1$SEBEHAVR.0)
+n_pairs <- nrow(adat.1)
+n_simulations <- 100000
+
+# y = SEGRADES
+count <- 0
+for (i in 1:n_simulations) {
+    permutation <- generate_random_vector(n_pairs)
+    simulated_ate <- mean((adat.1$SEGRADES.1 - adat.1$SEGRADES.0) * permutation)
+    if (simulated_ate > observed_ate) {
+        count <- count + 1
+    }
+}
+p_value <- count / n_simulations
+p_value
+
+# y = SEBEHAVR
+count <- 0
+for (i in 1:n_simulations) {
+    permutation <- generate_random_vector(n_pairs)
+    simulated_ate <- mean((adat.1$SEBEHAVR.1 - adat.1$SEBEHAVR.0) * permutation)
+    if (simulated_ate > observed_ate) {
+        count <- count + 1
+    }
+}
+p_value <- count / n_simulations
+p_value
+
+# y = SESCHLWR
+count <- 0
+for (i in 1:n_simulations) {
+    permutation <- generate_random_vector(n_pairs)
+    simulated_ate <- mean((adat.1$SESCHLWR.1 - adat.1$SESCHLWR.0) * permutation)
+    if (simulated_ate > observed_ate) {
+        count <- count + 1
+    }
+}
+p_value <- count / n_simulations
+p_value
 ```
 
-Should HGOVCUR be included in the linear model?
 ```{r}
-# bias corrected estimate of the ATE on the treated
+# Raphaelle's code ---------
+
+# bias corrected estimate of the ATE on the treated and its variance
+n1 <- nrow(adat.1)
 
 # outcome y = SEGRADES
-n1 <- nrow(adat.1)
-fit1 <- lm(SEGRADES.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+# estimator
+fit1 <- lm(SEGRADES.1 ~ adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
              adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
-fit0 <- lm(SEGRADES.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+fit0 <- lm(SEGRADES.0 ~ adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
              adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
 match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
 match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
@@ -209,12 +253,16 @@ mu1hat <- predict(fit1,match0)
 taum <- mean(adat.1$SEGRADES.1-adat.1$SEGRADES.0)
 bias <- sum(mu0hat - mu1hat)/n1
 taum - bias
+# variance
+vhat <- sum((adat.1$SEGRADES.1 - mu1hat)^2 + (adat.1$SEGRADES.0 - mu0hat)^2)/n1^2
+vhat
 
 # outcome y = SEBEHAVR
+# estimator
 n1 <- nrow(adat.1)
-fit1 <- lm(SEBEHAVR.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
+fit1 <- lm(SEBEHAVR.1 ~ adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
              adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
-fit0 <- lm(SEBEHAVR.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
+fit0 <- lm(SEBEHAVR.0 ~ adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
              adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
 match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
 match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
@@ -225,6 +273,9 @@ mu1hat <- predict(fit1,match0)
 taum <- mean(adat.1$SEBEHAVR.1-adat.1$SEBEHAVR.0)
 bias <- sum(mu0hat - mu1hat)/n1
 taum - bias
+#variance
+vhat <- sum(((adat.1$SEBEHAVR.1 - mu1hat)^2 + (adat.1$SEBEHAVR.0 - mu0hat)^2))/n1^2
+vhat
 
 # outcome y = SESCHLWR
 n1 <- nrow(adat.1)
@@ -241,31 +292,76 @@ mu1hat <- predict(fit1,match0)
 taum <- mean(adat.1$SESCHLWR.1-adat.1$SESCHLWR.0)
 bias <- sum(mu0hat - mu1hat)/n1
 taum - bias
-
-# repeat for other outcomes
-# bias_corrected_ATE <- function(y_name) {
-# #y.1 <- adat.1[[paste0(y_name,".1")]]
-# #y.0 <- adat.1[[paste0(y_name,".0")]]
-# n1 <- nrow(adat.1)
-# fit1 <- lm(y.1 ~ adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
-#             adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
-# fit0 <- lm(y.0 ~ adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
-#             adat.1$MOMEDUC.0 + adat.1$MOMSTAT.0 + adat.1$ZIPURB.0, data=adat.1)
-# match0 <- adat.1[, seq(1, ncol(adat.1)-1, by = 2)]
-# match1 <- adat.1[, seq(2, ncol(adat.1), by = 2)]
-# match0 <- rename_at(match0,.vars = vars(ends_with(".0")),.funs = funs(sub("[.]0$", "", .)))
-# match1 <- rename_at(match1,.vars = vars(ends_with(".1")),.funs = funs(sub("[.]1$", "", .)))
-# mu0hat <- predict(fit0,match1)
-# mu1hat <- predict(fit1,match0)
-# taum <- mean(adat.1$y.1-adat.1$y.0)
-# bias <- sum(mu0hat - mu1hat)/n1
-# taumbc <- taum - bias
-# return(taumbc)
-#     }
-# for (y in outcomes) {
-#     print(bias_corrected_ATE(y))
-# }
-
+# variance
+vhat <- sum(((adat.1$SESCHLWR.1 - mu1hat)^2 + (adat.1$SESCHLWR.0 - mu0hat)^2))/n1^2
+vhat
 ```
 
-Stratification
+
+```{r}
+# Paul's code ---------
+mahal_distance <- smahal(dat$HGOVCUR, dat[, covariates])
+distance <- addcaliper(mahal_distance, z = dat$HGOVCUR, p = dat$prop, caliper = 0.1)
+
+pair_matching <- pairmatch(distance, data = dat)
+matching_summary <- summarize.match(dat, pair_matching)
+
+train_control <- matching_summary[, c("SEGRADES.1", "SEGRADES.0")]
+train_control$SEX <- matching_summary$SEX.0
+train_control$AGE2004 <- matching_summary$AGE2004.0
+train_control$RACEETHN <- matching_summary$RACEETHN.0
+train_control$MOMEDUC <- matching_summary$MOMEDUC.0
+train_control$MOMSTAT <- matching_summary$MOMSTAT.0
+train_control$ZIPURB <- matching_summary$ZIPURB.0
+
+train_treatment <- matching_summary[, c("SEGRADES.1", "SEGRADES.0")]
+train_treatment$SEX <- matching_summary$SEX.1
+train_treatment$AGE2004 <- matching_summary$AGE2004.1
+train_treatment$RACEETHN <- matching_summary$RACEETHN.1
+train_treatment$MOMEDUC <- matching_summary$MOMEDUC.1
+train_treatment$MOMSTAT <- matching_summary$MOMSTAT.1
+train_treatment$ZIPURB <- matching_summary$ZIPURB.1
+
+# Create the estimators for E[Y | Z = z, X = x]
+# mu_0 <- lm(y.0 ~ afqtpct + black + edm + faminc + female + hisp + incmiss, data <- train_control)
+mu_0 <- lm(SEGRADES.0 ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB, data <- train_control)
+# mu_1 <- lm(y.1 ~ afqtpct + black + edm + faminc + female + hisp + incmiss, data <- train_treatment)
+mu_1 <- lm(SEGRADES.1 ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB, data <- train_control)
+summary(mu_0)
+summary(mu_1)
+
+# Compute bias estimator
+# we note that J_i contains only one unit since we are working with pairs
+bias <- mean(predict(mu_0, train_treatment) - predict(mu_0, train_control))
+
+unbiased_ate <- observed_ate - bias
+
+variance <- sum((matching_summary$SEGRADES.1 - predict(mu_1, train_treatment))^2
+                 + (matching_summary$SEGRADES.0 - predict(mu_0, train_control))^2) / nrow(matching_summary.1)^2
+
+unbiased_ate
+variance
+```
+
+```{r}
+# Annie's code ---------
+mat1 <- smahal(dat$HGOVCUR, dat[, outcomes])
+mat2 <- addcaliper(mat1, z=dat$HGOVCUR, p=dat$prop, caliper=.1)
+pairs2 <- pairmatch(mat2, data = dat)
+mat_sum <- summarize.match(dat, pairs2)
+n1 <- nrow(mat_sum)
+
+fit <- lm(SEGRADES.0 ~ SEX.0 + AGE2004.0 + RACEETHN.0 + MOMEDUC.0 + MOMSTAT.0 + ZIPURB.0, data = mat_sum)
+mu_0_xmi <- predict(fit, mat_sum[c("SEX.0", "AGE2004.0", "RACEETHN.0", "MOMEDUC.0", "MOMSTAT.0", "ZIPURB.0")])
+mat_sum_t <- mat_sum[c("SEX.1", "AGE2004.1", "RACEETHN.1", "MOMEDUC.1", "MOMSTAT.1", "ZIPURB.1")]
+names(mat_sum_t) <- c("SEX.0", "AGE2004.0", "RACEETHN.0", "MOMEDUC.0", "MOMSTAT.0", "ZIPURB.0")
+mu_0_xi <- predict(fit, mat_sum_t)
+n1 <- nrow(mat_sum)
+tau_hat <- mean((mat_sum$SEGRADES.1 - mat_sum$SEGRADES.0) - (mu_0_xi - mu_0_xmi))
+tau_hat
+
+fit1 <- lm(SEGRADES.1 ~ faminc.1 + incmiss.1 + black.1 + hisp.1 + afqtpct.1 + edmissm.1 + edm.1 + female.1, data = mat_sum)
+mu_1_xi <- predict(fit1, mat_sum[c("SEX.1", "AGE2004.1", "RACEETHN.1", "MOMEDUC.1", "MOMSTAT.1", "ZIPURB.1")])
+V_hat <- sum((mat_sum$SEGRADES.1 - mu_1_xi)^2 + (mat_sum$SEGRADES.0 - mu_0_xmi)^2) / n1^2
+V_hat
+```
