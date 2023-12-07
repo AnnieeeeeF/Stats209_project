@@ -105,27 +105,15 @@ summary(glm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2
 
 AIPW estimator
 ```{r}
+source("src/aipw.R")
 # limit sample to people who were treatment or control
 # make HGOVCUR binary in {0,1} instead of {1,2}
 # aipw_data <- subset(full_data, HGOVCUR == 1 | HGOVCUR == 2)
 # aipw_data$HGOVCUR <- ifelse(aipw_data$HGOVCUR == 1, 1, 0)
 aipw_data <- subset(lr_data, HGOVCUR >= 0)
 
-# Compute propensity
-aipw_data$propensity <- glm(HGOVCUR ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB), data=aipw_data, family = "binomial")$fitted.values
+aipw <- aipw_analysis(aipw_data, compute_prop = TRUE, bootstrap_variance = FALSE)
 
-# Create estimators
-mu1 <- lm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB) + HGOVCUR, data=aipw_data, subset = HGOVCUR==1)
-
-mu0 <- lm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB) + HGOVCUR, data=aipw_data, subset = HGOVCUR==0)
-
-aipw_data$mu1pred <- predict(mu1, aipw_data)
-aipw_data$mu0pred <- predict(mu0, aipw_data)
-
-# Compute AIPW ATE estimator
-mu1_dr <- mean(aipw_data$HGOVCUR * (aipw_data$SEGRADES - aipw_data$mu1pred) / aipw_data$propensity + aipw_data$mu1pred)
-
-mu0_dr <- mean((1 - aipw_data$HGOVCUR) * (aipw_data$SEGRADES - aipw_data$mu0pred) / aipw_data$propensity + aipw_data$mu0pred)
-
-mu1_dr - mu0_dr
+aipw_ate <- aipw[1]
+aipw_var <- aipw[2]
 ```
