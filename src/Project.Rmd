@@ -233,9 +233,8 @@ p_value
 ```
 
 ```{r}
-# Raphaelle's code ---------
-
 # bias corrected estimate of the ATE on the treated and its variance
+# Raphaelle's code ---------
 n1 <- nrow(adat.1)
 
 # outcome y = SEGRADES
@@ -259,7 +258,6 @@ vhat
 
 # outcome y = SEBEHAVR
 # estimator
-n1 <- nrow(adat.1)
 fit1 <- lm(SEBEHAVR.1 ~ adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
              adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
 fit0 <- lm(SEBEHAVR.0 ~ adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
@@ -278,7 +276,6 @@ vhat <- sum(((adat.1$SEBEHAVR.1 - mu1hat)^2 + (adat.1$SEBEHAVR.0 - mu0hat)^2))/n
 vhat
 
 # outcome y = SESCHLWR
-n1 <- nrow(adat.1)
 fit1 <- lm(SESCHLWR.1 ~ adat.1$HGOVCUR.1 + adat.1$SEX.1 + adat.1$AGE2004.1 + adat.1$RACEETHN.1 + 
              adat.1$MOMEDUC.1 + adat.1$MOMSTAT.1 + adat.1$ZIPURB.1, data=adat.1)
 fit0 <- lm(SESCHLWR.0 ~ adat.1$HGOVCUR.0 + adat.1$SEX.0 + adat.1$AGE2004.0 + adat.1$RACEETHN.0 + 
