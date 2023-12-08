@@ -157,12 +157,18 @@ summary(glm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2
 ```
 
 
+```{r}
+# convert categorical variables to as.factor
+dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
+dat$HGOVCUR <- as.vector(dat$HGOVCUR)
+```
+
 
 PART A: Exploratory data analysis
 
 ```{r}
 # balance of the covariates
-plot(xBalance(HGOVCUR ~ as.factor(SEX) + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB -1, strata= list(unstrat=NULL), data=dat))
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB -1, strata= list(unstrat=NULL), data=dat))
 ```
 
 ```{r}
@@ -174,20 +180,13 @@ ggtitle("Histogram of the edm and faminc covariates")
 
 ```{r}
 # estimation of the propensity score 
-dat$prop <- glm(HGOVCUR ~ as.factor(SEX) + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB, family=binomial, 
+dat$prop <- glm(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB, family=binomial, 
                 data=dat)$fitted.values
 ggplot(dat, aes(x=prop, fill = as.factor(HGOVCUR))) + geom_density(alpha=0.4) + 
   ggtitle("Distribution of the propensity score")
 ```
 
 PART B: Pairwise matching
-
-```{r}
-# matched pair set using Mahalanobis distance, w/o caliper
-mat.1 <- smahal(dat$HGOVCUR, dat[,c("SEX", "AGE2004", "RACEETHN", "MOMEDUC", "MOMSTAT", "ZIPURB")]) 
-ms.1 <- pairmatch(mat.1, data=dat)
-adat.1 <- summarize.match(dat, ms.1)
-```
 
 ```{r}
 # average absolute difference in propensity score, before caliper matching
@@ -201,20 +200,18 @@ max(abs(adat.1$prop.1-adat.1$prop.0))
 mat.2 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1)
 ms.2 <- pairmatch(mat.2, data=dat)
 adat.2 <- summarize.match(dat,ms.2)
+
+# average absolute difference in propensity score, after caliper matching
+mean(abs(adat.2$prop.1-adat.2$prop.0))
+# max absolute difference
+max(abs(adat.2$prop.1-adat.2$prop.0))
 ```
 
 ```{r}
 # covariate balance before and after caliper matching
-plot(xBalance(HGOVCUR ~ as.factor(SEX) + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop- 1, 
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB + prop- 1, 
             strata=list(unstrat=NULL, ms.2=~ms.2),
               data=dat)) 
-```
-
-```{r}
-# average absolute difference in propensity score, before caliper matching
-mean(abs(adat.2$prop.1-adat.2$prop.0))
-# max absolute difference
-max(abs(adat.2$prop.1-adat.2$prop.0))
 ```
 
 PART C: 1 to k matching
@@ -225,7 +222,7 @@ mat.3 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1)
 ms.3 <- pairmatch(mat.3, controls = 5, data=dat)
 
 # covariate balance before and after 1-5 matching
-plot(xBalance(HGOVCUR ~ as.factor(SEX) + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.3=~ms.3),
               data=dat))
 ```
@@ -233,26 +230,27 @@ plot(xBalance(HGOVCUR ~ as.factor(SEX) + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT 
 
 ```{r}
 # force balance on MOMSTAT
-mat.4 <- addalmostexact(mat.3, z=dat$HGOVCUR, f=dat$MOMSTAT, mult=5) 
+mat.4 <- addalmostexact(mat.3, z=dat$HGOVCUR, f=as.factor(dat$MOMSTAT), mult=5) 
 ms.4 <- pairmatch(mat.4, controls = 5, data=dat)
 
-# compare balance before and after forcing balance
-plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+# compare balance before
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.3=~ms.3),
               data=dat))
 
-plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+# and after forcing
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.4=~ms.4),
               data=dat))
 ```
 
 ```{r}
-# match each treated to 15 controls, w/ caliper
+# match each treated to 12 controls, w/ caliper
 mat.5 <- addcaliper(mat.1, z=dat$HGOVCUR, p=dat$prop, caliper=0.1) # same caliper as before, different name
-ms.5 <- pairmatch(mat.5, controls = 15, data=dat)
+ms.5 <- pairmatch(mat.5, controls = 12, data=dat) # can only match to 12 because not enough controls for each treated
 
-# covariate balance before and after 1-15 matching
-plot(xBalance(HGOVCUR ~ SEX + AGE2004 + RACEETHN + MOMEDUC + MOMSTAT + ZIPURB + prop - 1,
+# covariate balance before and after 1-12 matching
+plot(xBalance(HGOVCUR ~ SEX + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + ZIPURB + prop - 1,
               strata=list(unstrat=NULL, ms.5=~ms.5),
               data=dat))
 ```
@@ -408,7 +406,7 @@ bias <- mean(predict(mu_0, train_treatment) - predict(mu_0, train_control))
 unbiased_ate <- observed_ate - bias
 
 variance <- sum((matching_summary$SEGRADES.1 - predict(mu_1, train_treatment))^2
-                 + (matching_summary$SEGRADES.0 - predict(mu_0, train_control))^2) / nrow(matching_summary.1)^2
+                 + (matching_summary$SEGRADES.0 - predict(mu_0, train_control))^2) / nrow(matching_summary)^2
 
 unbiased_ate
 variance
