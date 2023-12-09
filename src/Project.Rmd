@@ -118,17 +118,12 @@ summary(glm(SEGRADES ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2
 ```
 
 
-"Data cleaning"
+as.factor
 ```{r}
-# limit sample to people who were treatment or control
-# make HGOVCUR binary in {0,1} instead of {1,2}
-dat <- subset(dat, HGOVCUR == 1 | HGOVCUR == 2)
-dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
-
 # factor categorical variables - not working
 # dat$RACEETHN <- as.factor(dat$RACEETHN)
 # dat$MOMEDUC <- as.factor(dat$MOMEDUC)
-# dat$MOMSTAT <- as.factor(dat$MOMSTAT
+# dat$MOMSTAT <- as.factor(dat$MOMSTAT)
 ```
 
 PART A: Exploratory data analysis
