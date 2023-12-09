@@ -637,10 +637,13 @@ AIPW estimator
 # make HGOVCUR binary in {0,1} instead of {1,2}
 # aipw_data <- subset(full_data, HGOVCUR == 1 | HGOVCUR == 2)
 # aipw_data$HGOVCUR <- ifelse(aipw_data$HGOVCUR == 1, 1, 0)
-aipw_data <- subset(lr_data, HGOVCUR >= 0)
+# aipw_data <- subset(lr_data, HGOVCUR >= 0)
+source("src/aipw.R")
+dat <- filter_and_clean(full_data, verbose = 1)
+aipw_data <- dat
 
-aipw <- aipw_analysis(aipw_data, compute_prop = TRUE, n_bootstrap = 100)
-
+aipw <- aipw_analysis(aipw_data, n_bootstrap = 100)
+aipw
 aipw_ate <- aipw[1]
 aipw_var <- aipw[2]
 ```
