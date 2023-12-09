@@ -42,6 +42,7 @@ select_sample <- function(full_data, verbose = 0) {
 
 clean <- function(dat) {
     dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
+    dat$HGOVCUR <- as.vector(dat$HGOVCUR)
 
     # Group separated/divorced/widowed together like in the paper
     dat$MOMSTAT[dat$MOMSTAT == 3] <- 2
