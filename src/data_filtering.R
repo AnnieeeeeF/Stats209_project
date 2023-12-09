@@ -1,4 +1,4 @@
-filter_and_clean <- function(full_data, verbose = 0) {
+select_sample <- function(full_data, verbose = 0) {
     dat <- full_data
 
     # Exclude homeschooled children
@@ -32,14 +32,44 @@ filter_and_clean <- function(full_data, verbose = 0) {
     if (verbose)
         print(sprintf("%i units left after filtering children from ethnicities other than Black/Hispanic/White.", nrow(dat)))
 
-    # Cleanup treatment variable
+    # Select units for which treatment is well-defined
     dat <- subset(dat, HGOVCUR >= 0)
     if (verbose)
         print(sprintf("%i units left after selecting units for which treatment variable is defined.", nrow(dat)))
-    dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
 
     return(dat)
 }
+
+clean <- function(dat) {
+    dat$HGOVCUR <- ifelse(dat$HGOVCUR == 1, 1, 0)
+
+    # Group separated/divorced/widowed together like in the paper
+    dat$MOMSTAT[dat$MOMSTAT == 3] <- 2
+    dat$MOMSTAT[dat$MOMSTAT == 4] <- 2
+    dat$MOMSTAT[dat$MOMSTAT == 5] <- 3
+
+    # Group all college and above together like in the paper
+    dat$MOMEDUC[dat$MOMEDUC == 4] <- 3
+    dat$MOMEDUC[dat$MOMEDUC == 5] <- 3
+
+    return(dat)
+}
+
+filter_and_clean <- function(full_data, verbose = 0) {
+    dat <- select_sample(full_data, verbose)
+    dat <- clean(dat)
+
+    dat$prop <- glm(HGOVCUR ~ SCSELF + RCNOW + CPSNOW + PAAHOME + as.factor(SEX) + AGE2004 + as.factor(RACEETHN) + as.factor(MOMEDUC) + as.factor(MOMSTAT) + as.factor(ZIPURB),
+                    data = dat,
+                    family = "binomial")$fitted.values
+
+    return(dat)
+}
+
+
+
+
+
 
 perform_sanity_checks <- function(dat) {
     print(sprintf("The observed proportion of children receiving care from a relative other than a parent on a regular basis after school, for example, from grandparents, brothers or sisters, or any other relatives is %f, when in the article it is closer to 0.262.", nrow(subset(dat, RCNOW == 1)) / nrow(dat)))
